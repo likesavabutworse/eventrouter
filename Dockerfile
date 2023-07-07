@@ -1,13 +1,20 @@
-FROM registry.redhat.io/ubi9/go-toolset:latest AS builder
-WORKDIR  /go/src/github.com/openshift/eventrouter
-USER 0
-COPY Makefile *.go go.mod go.sum ./
+FROM golang:1.20-alpine
+
+# Install the Certificate-Authority certificates for the app to be able to make
+# calls to HTTPS endpoints.
+RUN apk add --no-cache ca-certificates
+RUN apk --no-cache add curl
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN go mod download
+
 COPY sinks ./sinks
+COPY *.go ./
+RUN go build -o /eventrouter
 
-RUN make build
+# Perform all further action as an unprivileged user.
+USER 65535:65535
 
-FROM registry.redhat.io/ubi9/ubi:latest
-USER 1000
-COPY --from=builder /go/src/github.com/openshift/eventrouter/eventrouter /bin/eventrouter
-CMD ["/bin/eventrouter", "-v", "3", "-logtostderr"]
-LABEL version=release-5.8
+ENTRYPOINT ["/eventrouter"]
